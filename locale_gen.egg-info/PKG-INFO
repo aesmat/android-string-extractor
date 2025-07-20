@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: locale-gen
+Version: 1.0.0
+Summary: Android XML string extractor and translation sync tool
+Author: Ahmed Esmat
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: Environment :: Console
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: license
+Dynamic: requires-python
+Dynamic: summary
+
+Install Locally:
+pipx uninstall locale-gen
+pipx install --editable .
+
+
+Usage:
+locale-gen          # Run extraction
+locale-gen --dry-run
+
+To Build a Wheel (Optional):
+python setup.py sdist bdist_wheel
+
+Publish:
+To TestPyPI: twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+To PyPI: twine upload dist/*
+

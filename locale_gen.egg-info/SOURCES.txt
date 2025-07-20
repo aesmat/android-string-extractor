@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+setup.py
+locale_gen/__init__.py
+locale_gen/cli.py
+locale_gen.egg-info/PKG-INFO
+locale_gen.egg-info/SOURCES.txt
+locale_gen.egg-info/dependency_links.txt
+locale_gen.egg-info/entry_points.txt
+locale_gen.egg-info/top_level.txt
