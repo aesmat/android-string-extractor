@@ -10,7 +10,10 @@ COMMON_WORDS = {
 
 SKIP_VALUES = {"", "---", "..."}
 
-COMMON_ATTRS = ['android:text', 'android:hint', 'android:contentDescription']
+# COMMON_ATTRS = ['android:text', 'android:hint', 'android:contentDescription']
+COMMON_ATTRS = ['{http://schemas.android.com/apk/res/android}text',
+                '{http://schemas.android.com/apk/res/android}hint',
+                '{http://schemas.android.com/apk/res/android}contentDescription']
 
 def generate_short_key(text, existing_keys, common_words, key_index):
     words = re.findall(r'\w+', text.lower())
@@ -58,7 +61,7 @@ def extract_xml_strings(res_dir, existing_values, key_index, dry_run=False):
                     for elem in root.iter():
                         for attr in COMMON_ATTRS:
                             value = elem.get(attr)
-                            if value and not value.startswith("@") and value.strip() not in SKIP_VALUES:
+                            if value and not value.startswith("@", "?")) and value.strip() not in SKIP_VALUES:
                                 # Check if value exists in strings.xml
                                 existing_key = next((k for k, v in existing_values.items() if v == value), None)
                                 if existing_key:
