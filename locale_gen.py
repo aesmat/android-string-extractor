@@ -1,208 +1,203 @@
 import os
 import re
+import argparse
 import xml.etree.ElementTree as ET
-import shutil
-import sys
+from xml.sax.saxutils import escape
 
 COMMON_WORDS = {
     'the', 'your', 'to', 'for', 'and', 'with', 'a', 'of', 'on', 'in', 'is', 'package'
 }
-key_index = [1]
 
+SKIP_VALUES = {"", "---", "..."}
 
-def ensure_in_app_module():
-    cwd = os.getcwd()
-    expected = os.path.join(cwd, "src", "main", "res")
-    gradle_file = os.path.join(cwd, "build.gradle")
+COMMON_ATTRS = ['android:text', 'android:hint', 'android:contentDescription']
 
-    if not os.path.isdir(expected):
-        print("❌ Error: 'src/main/res/' not found in current directory.")
-        print("   Please run this script inside your Android app module (e.g., app/ or app-mob/)")
-        sys.exit(1)
-
-    if not os.path.isfile(gradle_file):
-        print("⚠️ Warning: No 'build.gradle' found. Are you sure this is an Android app module?")
-
-
-def find_res_folder():
-    return os.path.join(os.getcwd(), "src", "main", "res")
-
-
-def generate_short_key(text, existing_keys):
-    words = re.split(r'\W+', text.lower())
-    filtered = [w for w in words if w and w not in COMMON_WORDS]
-    base_words = filtered[:3]
-    base = "_".join(base_words)
-
+def generate_short_key(text, existing_keys, common_words, key_index):
+    words = re.findall(r'\w+', text.lower())
+    filtered = [w for w in words if w not in common_words]
+    base = '_'.join(filtered[:3])
     if not base or base[0].isdigit():
-        base = f"key_{key_index[0]}"
+        base = f'key_{key_index[0]}'
         key_index[0] += 1
-
-    if base[0].isdigit():
-        base = "k_" + base
-
-    key = base.lower()
-
+    key = base
     count = 1
     while key in existing_keys:
-        key = f"{base}_{count}".lower()
+        key = f'{base}_{count}'
         count += 1
-
     return key
 
+def find_strings_xml(base_dir):
+    for root, dirs, files in os.walk(base_dir):
+        if "src/main/res/values" in root.replace("\\", "/") and "strings.xml" in files:
+            return os.path.join(root, "strings.xml")
+    return None
 
-def escape_android_string(s):
-    return (s.replace("&", "&amp;")
-              .replace("'", "\\'")
-              .replace('"', "&quot;")
-              .replace("<", "&lt;")
-              .replace(">", "&gt;")
-              .replace("\n", "\\n"))
-
-
-def load_or_create_strings_xml(folder):
-    path = os.path.join(folder, "strings.xml")
-    if os.path.exists(path):
-        tree = ET.parse(path)
-        root = tree.getroot()
-    else:
-        root = ET.Element("resources")
-        tree = ET.ElementTree(root)
-    return tree, root, path
-
-
-def sync_other_languages(res_dir, default_keys, default_values, dry_run):
-    for folder in os.listdir(res_dir):
-        if folder.startswith("values-"):
-            lang_folder = os.path.join(res_dir, folder)
-            lang_tree, lang_root, lang_path = load_or_create_strings_xml(lang_folder)
-
-            added_count = 0
-            for key, value in zip(default_keys, default_values):
-                if lang_root.find(f"./string[@name='{key}']") is None:
-                    if not dry_run:
-                        string_elem = ET.SubElement(lang_root, "string", name=key)
-                        string_elem.text = escape_android_string(f"TODO: Translate {value}")
-                    added_count += 1
-
-            if added_count > 0:
-                if not dry_run:
-                    lang_tree.write(lang_path, encoding="utf-8", xml_declaration=True)
-                print(f"✔ Synced {added_count} missing strings to {lang_path}")
-
-
-def main():
-    dry_run = "--dry-run" in sys.argv
-
-    ensure_in_app_module()
-
-    res_dir = find_res_folder()
-    values_dir = os.path.join(res_dir, "values")
-    strings_xml_path = os.path.join(values_dir, "strings.xml")
-
-    if not os.path.exists(strings_xml_path):
-        raise Exception(f"❌ Could not find strings.xml at {strings_xml_path}")
-
-    # Load default strings
-    tree = ET.parse(strings_xml_path)
+def load_strings_xml(strings_path):
+    tree = ET.parse(strings_path)
     root = tree.getroot()
-
-    existing_keys = {}
-    value_to_key = {}
-
+    existing = {}
     for string in root.findall('string'):
-        key = string.get('name')
-        val = string.text or ""
-        existing_keys[key] = val
-        value_to_key[val] = key
+        existing[string.attrib['name']] = string.text
+    return existing, root
 
+def extract_xml_strings(res_dir, existing_values, key_index, dry_run=False):
     new_strings = {}
-    files_to_update = []
 
-    # Find layout folders
-    layout_dirs = [os.path.join(res_dir, d) for d in os.listdir(res_dir)
-                   if d.startswith("layout") and os.path.isdir(os.path.join(res_dir, d))]
+    for root_dir, _, files in os.walk(res_dir):
+        if 'layout' not in root_dir:
+            continue
 
-    print("✔ Detected layout folders:")
-    for d in layout_dirs:
-        print(" -", d)
+        for file in files:
+            if file.endswith(".xml"):
+                path = os.path.join(root_dir, file)
+                try:
+                    tree = ET.parse(path)
+                    root = tree.getroot()
+                    modified = False
 
-    print("✔ Detected strings.xml:", strings_xml_path)
+                    for elem in root.iter():
+                        for attr in COMMON_ATTRS:
+                            value = elem.get(attr)
+                            if value and not value.startswith("@") and value.strip() not in SKIP_VALUES:
+                                # Check if value exists in strings.xml
+                                existing_key = next((k for k, v in existing_values.items() if v == value), None)
+                                if existing_key:
+                                    # Use existing key
+                                    elem.set(attr, f"@string/{existing_key}")
+                                    modified = True
+                                    print(f"✔ Reused existing key '{existing_key}' for value '{value}' in {file}")
+                                else:
+                                    # Generate new key as before
+                                    key = generate_short_key(value, existing_values, COMMON_WORDS, key_index)
+                                    new_strings[key] = value
+                                    existing_values[key] = value
+                                    elem.set(attr, f"@string/{key}")
+                                    modified = True
 
-    for layout_dir in layout_dirs:
-        for file in os.listdir(layout_dir):
-            if not file.endswith(".xml"):
-                continue
+                    if not dry_run and modified:
+                        backup_path = f"{path}.bak"
+                        with open(backup_path, 'w', encoding='utf-8') as backup_file:
+                            backup_file.write(ET.tostring(root, encoding='unicode'))
+                        tree.write(path, encoding='utf-8', xml_declaration=True)
+                        print(f"✔ Updated {file} (backup: {backup_path})")
 
-            file_path = os.path.join(layout_dir, file)
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            modified = content
-
-            # Detect missing @string/ references
-            missing_keys = re.findall(r'@string/([a-zA-Z0-9_]+)', content)
-            for ref_key in missing_keys:
-                if ref_key not in existing_keys and ref_key not in new_strings:
-                    new_strings[ref_key] = f"MISSING: {ref_key}"
-
-            # Replace android:text, android:hint, android:contentDescription
-            matches = re.findall(r'(\b(?:android:)?(?:text|hint|contentDescription))="([^"]+)"', content)
-            for attr, value in matches:
-                if value.startswith("@") or value.strip() == "" or value == "---":
+                except ET.ParseError as e:
+                    print(f"⚠ Failed to parse {file}: {e}")
                     continue
 
-                if value in value_to_key:
-                    key = value_to_key[value]
-                else:
-                    key = generate_short_key(value, {**existing_keys, **new_strings})
-                    new_strings[key] = value
-                    value_to_key[value] = key
+    return new_strings
 
-                new_attr = f'{attr}="@string/{key}"'
-                pattern = re.escape(f'{attr}="{value}"')
-                modified = re.sub(pattern, new_attr, modified, count=1)
 
-            if content != modified:
-                files_to_update.append(file_path)
+def extract_java_strings(java_dir, existing_values, key_index, dry_run=False):
+    new_strings = {}
+    pattern = re.compile(r'(\.setText\s*\(\s*)"((?:[^"\\]*(?:\\.[^"\\]*)*))"\s*\)', re.DOTALL)
 
-                if not dry_run:
-                    backup = file_path + ".bak"
-                    shutil.copyfile(file_path, backup)
-                    with open(file_path, "w", encoding="utf-8") as f:
+    for root, _, files in os.walk(java_dir):
+        for file in files:
+            if file.endswith(".java"):
+                path = os.path.join(root, file)
+                with open(path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                modified = content
+                matches = pattern.findall(content)
+
+                for prefix, raw_string in matches:
+                    string = raw_string.strip()
+                    if (not string or string.isnumeric() or string.startswith("@") or string.strip() in SKIP_VALUES):
+                        continue
+                    existing_key = next((k for k, v in existing_values.items() if v == string), None)
+                    if existing_key:
+                        replacement = f'{prefix}getString(R.string.{existing_key}))'
+                        original = f'{prefix}"{raw_string}")'
+                        modified = modified.replace(original, replacement)
+                        print(f"✔ Reused existing key '{existing_key}' for value '{string}' in {file}")
+                    else:
+                        key = generate_short_key(string, existing_values, COMMON_WORDS, key_index)
+                        new_strings[key] = string
+                        existing_values[key] = string
+                        replacement = f'{prefix}getString(R.string.{key}))'
+                        original = f'{prefix}"{raw_string}")'
+                        modified = modified.replace(original, replacement)
+
+                if not dry_run and content != modified:
+                    backup_path = path + ".bak"
+                    with open(backup_path, 'w', encoding='utf-8') as backup_file:
+                        backup_file.write(content)
+
+                    with open(path, 'w', encoding='utf-8') as f:
                         f.write(modified)
+
                     print(f"✔ Updated {file} (backup: {file}.bak)")
 
-    # Report changes
-    if dry_run:
-        if files_to_update:
-            print("\n⚙️ Dry Run: Files that would be updated:")
-            for f in files_to_update:
-                print(" -", f)
-        else:
-            print("\n✅ Dry Run: No layout files need updates.")
+    return new_strings
 
-    # Add new strings to default
+def write_strings_xml(strings_path, root, new_strings, dry_run):
+    for key, value in new_strings.items():
+        elem = ET.Element('string', name=key)
+        elem.text = escape(value)
+        root.append(elem)
+
+    if not dry_run:
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="    ", level=0)
+        tree.write(strings_path, encoding="utf-8", xml_declaration=True)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--java', action='store_true', help='Extract strings from Java')
+    parser.add_argument('--xml', action='store_true', help='Extract strings from XML layouts')
+    parser.add_argument('--dry-run', action='store_true', help='Show changes without writing files')
+    args = parser.parse_args()
+
+    if not (args.xml or args.java):
+        print("⚠ Please specify at least one of --xml or --java to extract strings.")
+        parser.print_help()
+        return
+
+    project_dir = os.getcwd()
+    strings_path = find_strings_xml(project_dir)
+    if not strings_path:
+        print(f"❌ Could not find strings.xml in {project_dir}")
+        return
+    
+    try:
+        existing_keys, root = load_strings_xml(strings_path)
+    except FileNotFoundError:
+        print(f"❌ Could not load strings.xml at {strings_path}")
+        return
+
+    key_index = [1]
+    new_strings = {}
+
+    # Extract from XML layout
+    if args.xml:
+        res_dir = os.path.join(os.path.dirname(strings_path), "..", "..", "res")
+        if os.path.exists(res_dir):
+            xml_strings = extract_xml_strings(res_dir, existing_keys, key_index, args.dry_run)
+            new_strings.update(xml_strings)
+        else:
+            print(f"❌ Could not find {res_dir}")
+
+    # Extract from Java .setText()
+    if args.java:
+        java_dir = os.path.join(project_dir, 'src', 'main', 'java')
+        if os.path.exists(java_dir):
+            java_strings = extract_java_strings(java_dir, existing_keys, key_index, args.dry_run)
+            new_strings.update(java_strings)
+        else:
+            print(f"❌ Could not find {java_dir}")
+
     if new_strings:
-        if dry_run:
-            print(f"\n⚙️ Dry Run: {len(new_strings)} new strings would be added to default and translation files.")
+        print(f"✔ Found {len(new_strings)} new strings.")
+        write_strings_xml(strings_path, root, new_strings, args.dry_run)
+        if args.dry_run:
+            for k, v in new_strings.items():
+                print(f"[DRY RUN] {k}: {v}")
         else:
-            for key, value in new_strings.items():
-                if root.find(f"./string[@name='{key}']") is None:
-                    string_elem = ET.SubElement(root, "string", name=key)
-                    string_elem.text = escape_android_string(value)
-            tree.write(strings_xml_path, encoding="utf-8", xml_declaration=True)
-            print(f"✔ Added {len(new_strings)} new strings to {strings_xml_path}")
-
-    # Always sync translations
-    default_keys = list(existing_keys.keys()) + list(new_strings.keys())
-    default_values = list(existing_keys.values()) + list(new_strings.values())
-
-    sync_other_languages(res_dir, default_keys, default_values, dry_run)
-
-    if not new_strings and dry_run:
-        print("\n⚙️ Dry Run: No new keys, but translation folders would be synced.")
-
+            print(f"✔ Updated {strings_path}")
+    else:
+        print("⚠ No new strings found.")
 
 if __name__ == "__main__":
     main()
