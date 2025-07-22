@@ -10,8 +10,10 @@ COMMON_WORDS = {
 
 SKIP_VALUES = {"", "---", "..."}
 
-# COMMON_ATTRS = ['android:text', 'android:hint', 'android:contentDescription']
-COMMON_ATTRS = ['{http://schemas.android.com/apk/res/android}text',
+COMMON_ATTRS = ['android:text', 
+                'android:hint', 
+                'android:contentDescription',
+                '{http://schemas.android.com/apk/res/android}text',
                 '{http://schemas.android.com/apk/res/android}hint',
                 '{http://schemas.android.com/apk/res/android}contentDescription']
 

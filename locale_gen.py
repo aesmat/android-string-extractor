@@ -10,8 +10,10 @@ COMMON_WORDS = {
 
 SKIP_VALUES = {"", "---", "..."}
 
-# COMMON_ATTRS = ['android:text', 'android:hint', 'android:contentDescription']
-COMMON_ATTRS = ['{http://schemas.android.com/apk/res/android}text',
+COMMON_ATTRS = ['android:text', 
+                'android:hint', 
+                'android:contentDescription',
+                '{http://schemas.android.com/apk/res/android}text',
                 '{http://schemas.android.com/apk/res/android}hint',
                 '{http://schemas.android.com/apk/res/android}contentDescription']
 
@@ -61,7 +63,7 @@ def extract_xml_strings(res_dir, existing_values, key_index, dry_run=False):
                     for elem in root.iter():
                         for attr in COMMON_ATTRS:
                             value = elem.get(attr)
-                            if value and not value.startswith("@", "?") and value.strip() not in SKIP_VALUES:
+                            if value and not value.startswith("@", "?")) and value.strip() not in SKIP_VALUES:
                                 # Check if value exists in strings.xml
                                 existing_key = next((k for k, v in existing_values.items() if v == value), None)
                                 if existing_key:
@@ -146,7 +148,7 @@ def write_strings_xml(strings_path, root, new_strings, dry_run):
         ET.indent(tree, space="    ", level=0)
         tree.write(strings_path, encoding="utf-8", xml_declaration=True)
 
-def main():
+def cli():
     parser = argparse.ArgumentParser()
     parser.add_argument('--java', action='store_true', help='Extract strings from Java')
     parser.add_argument('--xml', action='store_true', help='Extract strings from XML layouts')
@@ -202,5 +204,4 @@ def main():
     else:
         print("⚠ No new strings found.")
 
-if __name__ == "__main__":
-    main()
+cli()
