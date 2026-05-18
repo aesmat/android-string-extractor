@@ -1,17 +1,17 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='locale-gen',
-    version='1.0.0',
+    name='strex',
+    version='1.1.0',
     packages=find_packages(),
     install_requires=[],
     entry_points={
         'console_scripts': [
-            'locale-gen=locale_gen.cli:cli',
+            'strex=strex.cli:cli',
         ],
     },
     author='Ahmed Esmat',
-    description='Android XML string extractor and translation sync tool',
+    description='Android string extractor — pull hardcoded strings into strings.xml from XML layouts and Java/Kotlin source files.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     license='MIT',
@@ -19,6 +19,8 @@ setup(
         'Programming Language :: Python :: 3',
         'Environment :: Console',
         'Operating System :: OS Independent',
+        'Topic :: Software Development :: Internationalization',
+        'Topic :: Software Development :: Localization',
     ],
     python_requires='>=3.6',
 )

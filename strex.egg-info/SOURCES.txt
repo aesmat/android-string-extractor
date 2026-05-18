@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+setup.py
+strex/__init__.py
+strex/cli.py
+strex.egg-info/PKG-INFO
+strex.egg-info/SOURCES.txt
+strex.egg-info/dependency_links.txt
+strex.egg-info/entry_points.txt
+strex.egg-info/top_level.txt

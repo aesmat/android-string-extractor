@@ -1,3 +1,24 @@
+Metadata-Version: 2.4
+Name: strex
+Version: 1.1.0
+Summary: Android string extractor — pull hardcoded strings into strings.xml from XML layouts and Java/Kotlin source files.
+Author: Ahmed Esmat
+License: MIT
+Classifier: Programming Language :: Python :: 3
+Classifier: Environment :: Console
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Software Development :: Internationalization
+Classifier: Topic :: Software Development :: Localization
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Dynamic: author
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: license
+Dynamic: requires-python
+Dynamic: summary
+
 # strex — Android String Extractor
 
 **strex** is a zero-dependency Python CLI tool that automatically pulls hardcoded strings out of your Android project and into `strings.xml`, making localization and maintainability effortless.
@@ -14,12 +35,6 @@
   `.setText()`, `.setTitle()`, `.setHint()`, `.setMessage()`, `.setSubtitle()`
 - **Kotlin source scanning** — handles the same method calls as Java **plus** property-assignment syntax:
   `.text = "…"`, `.title = "…"`, `.hint = "…"`, `.message = "…"`
-
-### Locale Sync
-- **`--sync`** — after extraction, syncs every `values-*/strings.xml` with the updated default `strings.xml`:
-  - Appends **missing keys** with the English value and a `<!-- TODO: translate -->` marker.
-  - Leaves existing translations completely untouched.
-- **`--prune`** — opt-in flag used alongside `--sync`; removes keys that no longer exist in the default file from all locale files.
 
 ### Key Management
 - **Reuses existing keys** — if a string already exists in `strings.xml`, its key is reused instead of creating a duplicate.
@@ -38,8 +53,7 @@
 - **Quiet mode** — suppress per-string output and show only the final summary.
 - **Custom project path** — point the tool at any module or project root with `--path`.
 - **Multi-module aware** — deterministic discovery prefers the `app/` module when multiple `strings.xml` files are found.
-- **Rich summary** — grouped report of new strings, reused keys, layout/source files modified, and locale sync results.
-
+- **Rich summary** — grouped report of new strings, reused keys, layout files modified, and source files modified.
 
 ---
 
@@ -53,28 +67,8 @@
 
 ## Installation
 
-### 1. Install pipx (if not already installed)
-
 ```bash
-# Ubuntu / Debian
-sudo apt install pipx
-
-# macOS (Homebrew)
-brew install pipx
-```
-
-### 2. Add pipx to your PATH
-
-```bash
-pipx ensurepath
-```
-
-Then **restart your terminal** (or run `source ~/.bashrc` / `source ~/.zshrc`) so the new PATH takes effect.
-
-### 3. Install strex
-
-```bash
-# Remove any previous version first (if applicable)
+# Remove any previous version
 pipx uninstall strex
 
 # Install from the project directory
@@ -83,7 +77,7 @@ pipx install --editable .
 
 The `--editable` flag lets you modify the source without reinstalling.
 
-After installation, the `strex` command is available globally in any terminal.
+After installation, `strex` is available as a global command.
 
 ---
 
@@ -102,7 +96,7 @@ Generates a distributable wheel in `dist/` that can be installed with `pip` or `
 Run `strex` from your **Android module root** (where `src/main/` lives), or use `--path` to specify it:
 
 ```bash
-strex [--xml] [--java] [--kotlin] [--sync] [--prune] [--dry-run] [--path PATH] [--quiet]
+strex [--xml] [--java] [--kotlin] [--dry-run] [--path PATH] [--quiet]
 ```
 
 ### Arguments
@@ -112,13 +106,11 @@ strex [--xml] [--java] [--kotlin] [--sync] [--prune] [--dry-run] [--path PATH] [
 | `--xml` | Extract strings from XML layout files |
 | `--java` | Extract strings from Java source files |
 | `--kotlin` | Extract strings from Kotlin source files |
-| `--sync` | Sync all `values-*/strings.xml` locale files with the default `strings.xml` after extraction |
-| `--prune` | Remove obsolete keys from locale files during `--sync` (opt-in) |
 | `--dry-run` | Preview all changes without writing any files |
 | `--path PATH` | Path to the Android module/project root (default: current directory) |
 | `--quiet` | Suppress per-string output; show summary only |
 
-At least one of `--xml`, `--java`, `--kotlin`, or `--sync` is required.
+At least one of `--xml`, `--java`, or `--kotlin` is required.
 
 ---
 
@@ -134,20 +126,8 @@ strex --xml --java
 # Full run on a Kotlin project, preview only
 strex --xml --kotlin --dry-run
 
-# Extract + sync all locales in one pass
-strex --xml --kotlin --sync
-
-# Extract + sync + remove obsolete keys from locale files
-strex --xml --kotlin --sync --prune
-
-# Sync locale files only (no extraction)
-strex --sync
-
-# Preview what sync would change
-strex --sync --dry-run
-
 # Run on a specific module, quiet output
-strex --xml --java --kotlin --sync --path /path/to/project/app --quiet
+strex --xml --java --kotlin --path /path/to/project/app --quiet
 ```
 
 ---
@@ -176,13 +156,7 @@ strex --xml --java --kotlin --sync --path /path/to/project/app --quiet
    ├─ .bak backup created for every modified file
    └─ New <string> entries appended to strings.xml (formatting preserved)
 
-6. Sync locale files  (only when --sync is passed)
-   ├─ Reads every values-*/strings.xml
-   ├─ Appends missing keys with English value + <!-- TODO: translate --> marker
-   ├─ Leaves existing translations untouched
-   └─ Removes obsolete keys when --prune is also set
-
-7. Dry run
+6. Dry run
    └─ When --dry-run is set, no files are written; all proposed changes are listed.
 ```
 

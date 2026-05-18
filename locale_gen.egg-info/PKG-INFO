@@ -17,19 +17,163 @@ Dynamic: license
 Dynamic: requires-python
 Dynamic: summary
 
-Install Locally:
-pipx uninstall locale-gen
-pipx install --editable .
+# Android String Extractor
 
+`locale-gen` automates the extraction of hardcoded strings from Android XML layout files and Java/Kotlin source code, moving them into `strings.xml` for better localization and maintainability.
 
-Usage:
-locale-gen          # Run extraction
-locale-gen --dry-run
+## Features
 
-To Build a Wheel (Optional):
+- **XML layout scanning** — extracts `android:text`, `android:hint`, `android:contentDescription`, `android:title`, `android:summary`, `android:message`, and `android:label` attributes.
+- **Java source scanning** — replaces `.setText()`, `.setTitle()`, `.setHint()`, `.setMessage()`, and `.setSubtitle()` string literals.
+- **Kotlin source scanning** — handles the same method calls as Java **plus** Kotlin property-assignment syntax (`.text = "…"`, `.title = "…"`, `.hint = "…"`, `.message = "…"`).
+- **Smart key reuse** — checks existing `strings.xml` entries and reuses matching keys instead of creating duplicates.
+- **Skips non-translatable strings** — entries marked `translatable="false"` are never reused or overwritten.
+- **Meaningful key generation** — derives concise keys from string content, ignoring common stop-words, with auto-numbering for uniqueness.
+- **Backup files** — creates `.bak` copies of every modified file before writing.
+- **Dry-run mode** — preview all changes without touching the filesystem.
+- **Quiet mode** — suppress per-string output and show only the final summary.
+- **Custom project path** — point the tool at any project root with `--path`.
+- **Rich summary** — prints a grouped report of new strings, reused keys, and files modified.
+
+## Prerequisites
+
+- Python 3.6 or higher
+- All dependencies are from the standard library (`xml.etree.ElementTree`, `argparse`, `re`)
+- `pipx` for isolated global installation (recommended)
+
+## Installation
+
+1. Clone or download this repository.
+2. Ensure your Android project follows the standard structure:
+   - XML layouts in `app/src/main/res/layout/`
+   - Java/Kotlin sources in `app/src/main/java/` (or `app/src/main/kotlin/`)
+   - String resources in `app/src/main/res/values/strings.xml`
+3. Install with `pipx`:
+   ```bash
+   pipx uninstall locale-gen   # remove any existing version
+   pipx install --editable .
+   ```
+
+## Building a Wheel (Optional)
+
+```bash
 python setup.py sdist bdist_wheel
+```
 
-Publish:
-To TestPyPI: twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-To PyPI: twine upload dist/*
+Generates a wheel in `dist/` that can be installed via `pip` or `pipx`.
 
+## Usage
+
+Run from your Android project root (or use `--path` to specify it):
+
+```bash
+locale-gen [--xml] [--java] [--kotlin] [--dry-run] [--path PATH] [--quiet]
+```
+
+### Arguments
+
+| Flag | Description |
+|------|-------------|
+| `--xml` | Extract strings from XML layout files |
+| `--java` | Extract strings from Java source files |
+| `--kotlin` | Extract strings from Kotlin source files |
+| `--dry-run` | Preview changes without writing any files |
+| `--path PATH` | Android project root directory (default: current directory) |
+| `--quiet` | Suppress per-string output; show the summary only |
+
+At least one of `--xml`, `--java`, or `--kotlin` is required.
+
+### Examples
+
+```bash
+# XML layouts only
+locale-gen --xml
+
+# Java and XML
+locale-gen --xml --java
+
+# Kotlin and XML, preview only
+locale-gen --xml --kotlin --dry-run
+
+# Full run on a project located elsewhere, quiet output
+locale-gen --xml --java --kotlin --path /path/to/MyAndroidApp --quiet
+```
+
+## How It Works
+
+1. **Locate `strings.xml`** — walks the project tree to find `src/main/res/values/strings.xml`.
+2. **Load existing strings** — parses keys, values, and `translatable="false"` markers.
+3. **Scan sources**:
+   - *XML*: iterates layout elements and replaces hardcoded attribute values with `@string/key` references.
+   - *Java/Kotlin*: uses regex patterns to replace string literals in method calls and (for Kotlin) property assignments with `getString(R.string.key)`.
+4. **Generate keys** — builds keys from string content, skipping stop-words; appends a counter to ensure uniqueness.
+5. **Write changes**:
+   - Updates XML/Java/Kotlin files with resource references.
+   - Appends new `<string>` entries to `strings.xml`.
+   - Creates `.bak` backups of every modified file.
+6. **Dry run** — when `--dry-run` is set, no files are written; proposed changes are listed in the summary.
+
+## Scanned Patterns
+
+### XML attributes
+`android:text`, `android:hint`, `android:contentDescription`, `android:title`, `android:summary`, `android:message`, `android:label`
+
+### Java / Kotlin method calls
+`.setText()`, `.setTitle()`, `.setHint()`, `.setMessage()`, `.setSubtitle()`
+
+### Kotlin property assignments
+`.text = "…"`, `.title = "…"`, `.hint = "…"`, `.message = "…"`
+
+## Example Output
+
+```
+📄 Scanning XML layouts...
+    ✔ Reused 'welcome_message' for 'Welcome to the app' in activity_main.xml
+    + New key 'sign_in' for 'Sign In' in activity_main.xml
+    ✔ Updated activity_main.xml
+
+🎯 Scanning Kotlin source files...
+    + New key 'error_network' for 'Network error' in MainActivity.kt [Kotlin prop]
+    ✔ Updated MainActivity.kt (backup: MainActivity.kt.bak)
+
+────────────────────────────────────────────────
+📊  Summary
+────────────────────────────────────────────────
+  New strings extracted : 2
+  Existing keys reused  : 1
+  Source files modified : 2
+
+  ✔ strings.xml updated → app/src/main/res/values/strings.xml
+────────────────────────────────────────────────
+```
+
+## Notes
+
+- Strings that are empty, numeric, or start with `@` or `?` are skipped automatically.
+- Strings marked `translatable="false"` in `strings.xml` are never reused as replacement keys.
+- Common stop-words (`the`, `and`, `to`, `for`, …) are excluded from generated key names.
+- Always review changes in complex projects to ensure correctness.
+
+## Limitations
+
+- Kotlin coroutine string interpolation (`"Hello $name"`) is not handled.
+- `Toast.makeText()` and other multi-argument string usages are not yet supported.
+- Assumes a standard Android project directory structure.
+
+## Author
+
+Ahmed Esmat
+
+## License
+
+MIT License. Feel free to use and modify as needed.
+
+## Publish
+
+```bash
+# To TestPyPI
+twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+
+# To PyPI
+twine upload dist/*
+```

@@ -1,0 +1,2 @@
+[console_scripts]
+strex = strex.cli:cli
