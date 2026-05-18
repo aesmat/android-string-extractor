@@ -3,6 +3,12 @@ import re
 import argparse
 import xml.etree.ElementTree as ET
 
+# Register namespaces so ET writes back the original prefixes
+# instead of auto-generating ns0, ns1, …
+ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+ET.register_namespace('app',     'http://schemas.android.com/apk/res-auto')
+ET.register_namespace('tools',   'http://schemas.android.com/tools')
+
 COMMON_WORDS = {
     'the', 'your', 'to', 'for', 'and', 'with', 'a', 'of', 'on', 'in', 'is', 'package'
 }
@@ -56,8 +62,15 @@ KOTLIN_PROP_PATTERNS = [
     re.compile(f'{_COMMENT}|{src}', re.DOTALL) for src in _KOTLIN_PROP_SOURCES
 ]
 
-# XML special characters that need escaping when writing as raw text
-_XML_ESCAPES = str.maketrans({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'})
+# Escaping rules for Android strings.xml text content:
+#   &        → &amp;   (required: & starts XML entities)
+#   <        → &lt;    (required: < starts XML tags)
+#   >        → &gt;    (recommended)
+#   '        → &apos;  (XML entity — safe with AAPT1 and AAPT2;
+#                       backslash form \' can trigger AAPT2's strict
+#                       unicode-escape-sequence validator)
+#   "        → no escaping needed in element text (only in attributes)
+_XML_ESCAPES = str.maketrans({'&': '&amp;', '<': '&lt;', '>': '&gt;', "'": "\\\'"})
 
 
 # ---------------------------------------------------------------------------
@@ -335,6 +348,23 @@ def extract_source_strings(source_dir, existing_values, non_translatable_keys, k
 _STRING_LINE_RE = re.compile(r'^[ \t]*<string name="{key}">.*?</string>[ \t]*\r?\n', re.MULTILINE)
 # Matches a <!-- TODO: translate --> comment on the line immediately before the string
 _TODO_COMMENT_RE = re.compile(r'[ \t]*<!-- TODO: translate -->[ \t]*\r?\n$')
+# Extracts raw (already-escaped) text content from <string> elements
+_RAW_STRING_RE = re.compile(r'<string\b[^>]*\bname="([^"]+)"[^>]*>(.*?)</string>', re.DOTALL)
+
+
+def _raw_string_map(strings_path):
+    """
+    Read strings.xml as plain text and return {name: raw_content} where
+    raw_content is the already-escaped element text (e.g. \' or &apos; or
+    &amp; exactly as written in the file).
+
+    Using raw text instead of ET avoids double-escaping: ET decodes XML
+    entities on read, so re-applying _XML_ESCAPES would encode them again
+    (e.g. &apos; → ' → &apos; is fine, but \' → \' + re-escape → \\').
+    """
+    with open(strings_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    return {m.group(1): m.group(2) for m in _RAW_STRING_RE.finditer(content)}
 
 
 def sync_locale_files(res_dir, strings_path, prune=False, dry_run=False, verbose=True):
@@ -346,6 +376,9 @@ def sync_locale_files(res_dir, strings_path, prune=False, dry_run=False, verbose
     - Existing translations are never modified.
     """
     default_strings, _ = load_strings_xml(strings_path)
+    # Raw map preserves the original escaping (e.g. \' or &apos;) so values
+    # can be copied verbatim to locale files — no re-escaping needed.
+    raw_defaults = _raw_string_map(strings_path)
     values_dir = os.path.dirname(strings_path)   # …/res/values
     res        = os.path.dirname(values_dir)      # …/res
 
@@ -389,10 +422,12 @@ def sync_locale_files(res_dir, strings_path, prune=False, dry_run=False, verbose
         # --- Add missing keys ---
         if missing:
             lines = []
-            for key, value in missing.items():
-                escaped = (value or '').translate(_XML_ESCAPES)
+            for key in missing:
+                # Use the raw (already-escaped) text from strings.xml so we
+                # never double-escape (e.g. \' would become \\' via ET).
+                raw_value = raw_defaults.get(key, '')
                 lines.append('    <!-- TODO: translate -->')
-                lines.append(f'    <string name="{key}">{escaped}</string>')
+                lines.append(f'    <string name="{key}">{raw_value}</string>')
             insertion = '\n'.join(lines) + '\n'
 
             if not dry_run:
